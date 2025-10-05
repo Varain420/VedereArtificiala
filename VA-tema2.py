@@ -1,6 +1,5 @@
 # Laborator 2 - Conversii de la RGB la Grayscale și Dithering
-# Pentru a rula acest script, trebuie să aveți instalate următoarele biblioteci:
-# pip install opencv-python numpy matplotlib PyQt5
+
 
 import cv2
 import numpy as np
@@ -62,8 +61,7 @@ def sarcina_1_mediere_simpla(img_rgb):
     intermediar nu este suficient de mare. Acest lucru duce la rezultate incorecte.
     Pentru a preveni asta, conversia la un tip de date mai mare (ex: float sau int16)
     este necesară înainte de adunare. Formula R/3 + G/3 + B/3, dacă este executată
-    folosind operații pe flotanți, evită această problemă de la bun început.
-    Implementarea de mai jos folosește conversia la float pentru a garanta corectitudinea.
+    folosind operații pe floateri, evită această problemă de la bun început.
     """
     # Conversia la float pentru a evita overflow
     img_float = img_rgb.astype(np.float32)
@@ -175,8 +173,7 @@ def sarcina_8_grayscale_to_rgb(img_gray):
 
 # --- Execuția principală ---
 if __name__ == '__main__':
-    # **IMPORTANT**: Asigură-te că fișierul 'imagine_colorata.jpg'
-    # se află în același folder cu acest script!
+   
 
     imagine_color = incarcare_imagine_locala('imagine_colorata.jpg')
 
@@ -218,4 +215,5 @@ if __name__ == '__main__':
                          "Problema Inversă: Grayscale to RGB", cmap='gray')
     else:
         print("Scriptul nu a putut rula deoarece imaginea de test nu a fost încărcată.")
+
 
