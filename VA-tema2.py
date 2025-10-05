@@ -1,187 +1,221 @@
-# Laborator 2 - Detecția de forme, Histograme
+# Laborator 2 - Conversii de la RGB la Grayscale și Dithering
 # Pentru a rula acest script, trebuie să aveți instalate următoarele biblioteci:
-# pip install opencv-python numpy matplotlib
+# pip install opencv-python numpy matplotlib PyQt5
 
 import cv2
 import numpy as np
+import matplotlib
+
+matplotlib.use('Qt5Agg')  # Forțăm un backend grafic compatibil
 import matplotlib.pyplot as plt
-import urllib.request
 import os
 
 
-# --- Funcție ajutătoare pentru a descărca și încărca o imagine de test ---
-def incarcare_imagine_test(url, nume_fisier='imagine_test.jpg'):
-    """Descarcă o imagine de la un URL și o încarcă folosind OpenCV."""
+# --- Funcție ajutătoare pentru a încărca o imagine LOCALĂ ---
+def incarcare_imagine_locala(nume_fisier):
+    """Încarcă o imagine de pe disc folosind OpenCV."""
+    print(f"Încercare încărcare imagine locală: {nume_fisier}")
+    if not os.path.exists(nume_fisier):
+        print(f"EROARE: Fișierul imagine '{nume_fisier}' nu a fost găsit.")
+        print(
+            "Vă rugăm să descărcați o imagine colorată și să o salvați ca 'imagine_colorata.jpg' în folderul proiectului.")
+        return None
+
     try:
-        urllib.request.urlretrieve(url, nume_fisier)
         img = cv2.imread(nume_fisier)
         if img is None:
             raise Exception("Imaginea nu a putut fi încărcată. Verificați calea sau formatul fișierului.")
-        # OpenCV încarcă imaginile în format BGR, le convertim în RGB pentru afișare corectă cu Matplotlib
+        # OpenCV încarcă imaginile în format BGR, le convertim în RGB pentru afișare corectă
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        print("Imaginea locală a fost încărcată cu succes.")
         return img_rgb
     except Exception as e:
-        print(f"Eroare la încărcarea imaginii: {e}")
-        # Generează o imagine neagră ca fallback în caz de eroare
-        return np.zeros((400, 400, 3), dtype=np.uint8)
+        print(f"Eroare la încărcarea imaginii locale: {e}")
+        return None
 
 
 # --- Funcție ajutătoare pentru a afișa imagini ---
-def afiseaza_imagini(imagini, titluri, titlu_principal):
+def afiseaza_imagini(imagini, titluri, titlu_principal, cmap='gray'):
     """Afișează o listă de imagini folosind Matplotlib."""
     numar_imagini = len(imagini)
-    plt.figure(figsize=(15, 5))
+    plt.figure(figsize=(15, 8))
     plt.suptitle(titlu_principal, fontsize=16)
     for i in range(numar_imagini):
-        plt.subplot(1, numar_imagini, i + 1)
-        plt.imshow(imagini[i], cmap='gray' if len(imagini[i].shape) == 2 else None)
+        plt.subplot((numar_imagini + 2) // 3, 3, i + 1)
+        # Verificăm dacă imaginea este deja color sau trebuie afișată ca grayscale
+        is_color = len(imagini[i].shape) == 3
+        plt.imshow(imagini[i], cmap=None if is_color else cmap)
         plt.title(titluri[i])
         plt.axis('off')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
 
 
-# --- Sarcina 1: Detectează cercuri într-un video ---
-def sarcina_1(cale_video_intrare, cale_video_iesire='v1_output.mp4'):
+# --- Sarcina 1: Conversie prin Mediere Simplă ---
+def sarcina_1_mediere_simpla(img_rgb):
     """
-    Citește un fișier video, detectează cercurile în fiecare cadru și
-    salvează rezultatul într-un nou fișier video.
+    Converteste imaginea la grayscale folosind media aritmetică a canalelor R, G, B.
+
+    Explicație (R+G+B)/3 vs R/3+G/3+B/3:
+    Când se lucrează cu tipuri de date întregi pe 8 biți (valori între 0-255), suma R+G+B
+    poate depăși 255 (ex: 255+255+255=765), cauzând un 'overflow' dacă tipul de date
+    intermediar nu este suficient de mare. Acest lucru duce la rezultate incorecte.
+    Pentru a preveni asta, conversia la un tip de date mai mare (ex: float sau int16)
+    este necesară înainte de adunare. Formula R/3 + G/3 + B/3, dacă este executată
+    folosind operații pe flotanți, evită această problemă de la bun început.
+    Implementarea de mai jos folosește conversia la float pentru a garanta corectitudinea.
     """
-    print("--- Sarcina 1: Detecție cercuri în video ---")
-    if not os.path.exists(cale_video_intrare):
-        print(f"Eroare: Fișierul video '{cale_video_intrare}' nu a fost găsit.")
-        print("Vă rugăm să descărcați fișierul 'v1.mp4' sau să specificați o altă cale.")
-        return
+    # Conversia la float pentru a evita overflow
+    img_float = img_rgb.astype(np.float32)
+    R, G, B = img_float[:, :, 0], img_float[:, :, 1], img_float[:, :, 2]
 
-    # Deschidem fișierul video
-    cap = cv2.VideoCapture(cale_video_intrare)
-    if not cap.isOpened():
-        print("Eroare la deschiderea fișierului video.")
-        return
+    # Calculăm media
+    gray_img = (R + G + B) / 3.0
 
-    # Obținem proprietățile video pentru a crea fișierul de ieșire
-    latime_cadru = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    inaltime_cadru = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
-
-    # Definim codec-ul și creăm obiectul VideoWriter
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Sau 'XVID' pentru .avi
-    out = cv2.VideoWriter(cale_video_iesire, fourcc, fps, (latime_cadru, inaltime_cadru))
-
-    print(f"Procesare video... Salvare în '{cale_video_iesire}'")
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        # 1. Convertim cadrul la tonuri de gri
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        # 2. Aplicăm un blur pentru a reduce zgomotul și a îmbunătăți detecția
-        gray_blurred = cv2.medianBlur(gray, 5)
-
-        # 3. Detectăm cercurile folosind Transformata Hough
-        # Parametrii (dp, minDist, param1, param2) pot necesita ajustare în funcție de video
-        detected_circles = cv2.HoughCircles(gray_blurred, cv2.HOUGH_GRADIENT, dp=1.2, minDist=100,
-                                            param1=100, param2=30, minRadius=20, maxRadius=100)
-
-        # 4. Desenăm cercurile detectate pe cadrul original
-        if detected_circles is not None:
-            detected_circles = np.uint16(np.around(detected_circles))
-            for pt in detected_circles[0, :]:
-                a, b, r = pt[0], pt[1], pt[2]
-                # Desenăm circumferința cercului
-                cv2.circle(frame, (a, b), r, (0, 255, 0), 2)
-                # Desenăm centrul cercului
-                cv2.circle(frame, (a, b), 1, (0, 0, 255), 3)
-
-        # Scriem cadrul procesat în fișierul de ieșire
-        out.write(frame)
-
-    # Eliberăm resursele
-    cap.release()
-    out.release()
-    cv2.destroyAllWindows()
-    print("Procesare video finalizată.")
-    print("\n")
+    # Convertim înapoi la uint8 pentru afișare
+    return gray_img.astype(np.uint8)
 
 
-# --- Sarcina 2: Calculează și afișează histograma unei imagini ---
-def sarcina_2(img_rgb):
-    """Calculează și plotează histogramele pentru canalele R, G, B ale unei imagini."""
-    print("--- Sarcina 2: Histograma Imaginii ---")
+# --- Sarcina 2: Conversie prin Medie Ponderată ---
+def sarcina_2_medie_ponderata(img_rgb):
+    """Convertește imaginea la grayscale folosind trei seturi de ponderi diferite."""
+    weights1 = [0.299, 0.587, 0.114]  # Standardul (folosit și de OpenCV)
+    weights2 = [0.2126, 0.7152, 0.0722]  # BT.709
+    weights3 = [1 / 3, 1 / 3, 1 / 3]  # Echivalent cu medierea simplă, dar implementat cu dot product
 
-    culori = ('r', 'g', 'b')
-    canale = cv2.split(img_rgb)
+    gray1 = np.dot(img_rgb[..., :3], weights1).astype(np.uint8)
+    gray2 = np.dot(img_rgb[..., :3], weights2).astype(np.uint8)
+    gray3 = np.dot(img_rgb[..., :3], weights3).astype(np.uint8)
 
-    plt.figure(figsize=(10, 5))
-    plt.title("Histograma pe Canale de Culoare (RGB)")
-    plt.xlabel("Intensitate Bins")
-    plt.ylabel("Număr de Pixeli")
-
-    for canal, culoare in zip(canale, culori):
-        # cv2.calcHist([imagine], [canal], mask, [dimensiune_hist], [range])
-        hist = cv2.calcHist([canal], [0], None, [256], [0, 256])
-        plt.plot(hist, color=culoare)
-        plt.xlim([0, 256])
-
-    plt.legend(['Canal Roșu', 'Canal Verde', 'Canal Albastru'])
-    plt.show()
-    print("Histograma a fost calculată și afișată.")
-    print("\n")
+    return gray1, gray2, gray3
 
 
-# --- Sarcina 3: Egalizarea histogramei ---
-def sarcina_3(img_rgb):
-    """Aplică egalizarea histogramei pe o imagine și afișează rezultatele."""
-    print("--- Sarcina 3: Egalizarea Histogramei ---")
+# --- Sarcina 3: Conversie prin Desaturare ---
+def sarcina_3_desaturare(img_rgb):
+    """Gray = (min(R,G,B) + max(R,G,B)) / 2"""
+    val_min = np.min(img_rgb, axis=2)
+    val_max = np.max(img_rgb, axis=2)
+    gray_img = ((val_min.astype(np.float32) + val_max.astype(np.float32)) / 2.0).astype(np.uint8)
+    return gray_img
 
-    # 1. Convertim la tonuri de gri
-    img_gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
 
-    # 2. Aplicăm egalizarea histogramei
-    img_egalizata = cv2.equalizeHist(img_gray)
+# --- Sarcina 4: Conversie prin Decompoziție ---
+def sarcina_4_decompozitie(img_rgb):
+    """Gray = max(R,G,B) și Gray = min(R,G,B)"""
+    gray_max = np.max(img_rgb, axis=2)
+    gray_min = np.min(img_rgb, axis=2)
+    return gray_max, gray_min
 
-    # Afișăm imaginile
-    afiseaza_imagini([img_gray, img_egalizata], ["Gri Original", "Gri Egalizat"],
-                     "Comparare Imagine Originală vs. Egalizată")
 
-    # 3. Calculăm histogramele pentru ambele imagini (gri și egalizată)
-    hist_gray = cv2.calcHist([img_gray], [0], None, [256], [0, 256])
-    hist_egalizata = cv2.calcHist([img_egalizata], [0], None, [256], [0, 256])
+# --- Sarcina 5: Conversie prin Canal Unic ---
+def sarcina_5_canal_unic(img_rgb):
+    """Extrage fiecare canal de culoare ca o imagine grayscale."""
+    R = img_rgb[:, :, 0]
+    G = img_rgb[:, :, 1]
+    B = img_rgb[:, :, 2]
+    return R, G, B
 
-    # 4. Afișăm histogramele
-    plt.figure(figsize=(12, 6))
 
-    plt.subplot(1, 2, 1)
-    plt.title("Histograma Imaginii Gri Originale")
-    plt.plot(hist_gray)
-    plt.xlim([0, 256])
+# --- Sarcina 6: Număr Custom de Nuanțe de Gri ---
+def sarcina_6_nuante_gri_custom(img_gray, p=4):
+    """Reduce numărul de nuanțe de gri la p."""
+    factor_conversie = 255 / (p - 1)
+    img_redusa = (np.round(img_gray / factor_conversie) * factor_conversie).astype(np.uint8)
+    return img_redusa
 
-    plt.subplot(1, 2, 2)
-    plt.title("Histograma Imaginii Egalizate")
-    plt.plot(hist_egalizata)
-    plt.xlim([0, 256])
 
-    plt.tight_layout()
-    plt.show()
-    print("Egalizarea histogramei a fost aplicată și rezultatele afișate.")
-    print("\n")
+# --- Sarcina 7: Dithering ---
+def sarcina_7_dithering(img_gray, p=2, method='floyd'):
+    """Aplică dithering Floyd-Steinberg sau Burkes pentru a reduce numărul de culori."""
+    img_dither = img_gray.astype(np.float32)
+    h, w = img_dither.shape
+
+    if method == 'floyd':
+        # * 7/16
+        # 3/16 5/16 1/16
+        mask = [(0, 1, 7 / 16), (1, -1, 3 / 16), (1, 0, 5 / 16), (1, 1, 1 / 16)]
+    elif method == 'burkes':
+        # * * 8/32 4/32
+        # 2/32 4/32 8/32 4/32 2/32
+        mask = [(0, 1, 8 / 32), (0, 2, 4 / 32),
+                (1, -2, 2 / 32), (1, -1, 4 / 32), (1, 0, 8 / 32), (1, 1, 4 / 32), (1, 2, 2 / 32)]
+    else:
+        raise ValueError("Metoda de dithering necunoscută. Alegeți 'floyd' sau 'burkes'.")
+
+    factor_conversie = 255 / (p - 1)
+
+    for y in range(h):
+        for x in range(w):
+            old_pixel = img_dither[y, x]
+            new_pixel = np.round(old_pixel / factor_conversie) * factor_conversie
+            img_dither[y, x] = new_pixel
+            quant_error = old_pixel - new_pixel
+
+            for dy, dx, factor in mask:
+                ny, nx = y + dy, x + dx
+                if 0 <= ny < h and 0 <= nx < w:
+                    img_dither[ny, nx] += quant_error * factor
+
+    # Ne asigurăm că valorile rămân în intervalul [0, 255]
+    img_dither = np.clip(img_dither, 0, 255)
+    return img_dither.astype(np.uint8)
+
+
+# --- Problema Inversă: Grayscale to RGB ---
+def sarcina_8_grayscale_to_rgb(img_gray):
+    """Transformă o imagine grayscale într-una colorată folosind o hartă de culori."""
+    # O metodă simplă este să copiem canalul gri în R, G și B.
+    img_gray_3ch = cv2.cvtColor(img_gray, cv2.COLOR_GRAY2RGB)
+
+    # O metodă mai interesantă ("false color") folosește o hartă de culori (colormap)
+    img_false_color = cv2.applyColorMap(img_gray, cv2.COLORMAP_JET)
+
+    return img_gray_3ch, img_false_color
 
 
 # --- Execuția principală ---
 if __name__ == '__main__':
-    # Sarcina 1: Necesită un fișier video local numit 'v1.mp4'
-    # Puteți descărca un exemplu de video și redenumiți-l corespunzător.
-    sarcina_1('v1.mp4')
+    # **IMPORTANT**: Asigură-te că fișierul 'imagine_colorata.jpg'
+    # se află în același folder cu acest script!
 
-    # Sarcini 2 & 3: Folosim o imagine de test
-    URL_IMAGINE = "https://i.imgur.com/3_VA.jpg"  # O imagine cu contrast redus, bună pentru egalizare
-    imaginea_mea = incarcare_imagine_test(URL_IMAGINE, nume_fisier="imagine_test_lab2.jpg")
+    imagine_color = incarcare_imagine_locala('imagine_colorata.jpg')
 
-    if imaginea_mea.any():  # Verificăm dacă imaginea nu este goală
-        sarcina_2(imaginea_mea)
-        sarcina_3(imaginea_mea)
+    if imagine_color is not None:
+        # --- Rulează sarcinile 1-5 ---
+        gray1 = sarcina_1_mediere_simpla(imagine_color)
+        gray2_1, gray2_2, gray2_3 = sarcina_2_medie_ponderata(imagine_color)
+        gray3 = sarcina_3_desaturare(imagine_color)
+        gray4_max, gray4_min = sarcina_4_decompozitie(imagine_color)
+        gray5_R, gray5_G, gray5_B = sarcina_5_canal_unic(imagine_color)
+
+        afiseaza_imagini([imagine_color, gray1, gray2_1, gray3, gray4_max, gray4_min, gray5_R, gray5_G, gray5_B],
+                         ["Original", "1. Medie Simplă", "2. Medie Ponderată", "3. Desaturare",
+                          "4. Max Decomp", "4. Min Decomp", "5. Canal Roșu", "5. Canal Verde", "5. Canal Albastru"],
+                         "Metode de Conversie Grayscale")
+
+        # --- Rulează sarcina 6 ---
+        img_gray_standard = cv2.cvtColor(imagine_color, cv2.COLOR_RGB2GRAY)
+        nuante_4 = sarcina_6_nuante_gri_custom(img_gray_standard, p=4)
+        nuante_8 = sarcina_6_nuante_gri_custom(img_gray_standard, p=8)
+        afiseaza_imagini([img_gray_standard, nuante_4, nuante_8],
+                         ["Grayscale Original (256 nuanțe)", "Custom (4 nuanțe)", "Custom (8 nuanțe)"],
+                         "Sarcina 6: Număr Custom de Nuanțe de Gri")
+
+        # --- Rulează sarcina 7 ---
+        dither_floyd = sarcina_7_dithering(img_gray_standard, p=2, method='floyd')
+        dither_burkes = sarcina_7_dithering(img_gray_standard, p=2, method='burkes')
+        binarizat_simplu = sarcina_6_nuante_gri_custom(img_gray_standard, p=2)  # Binarizare simplă (fără dithering)
+
+        afiseaza_imagini([img_gray_standard, binarizat_simplu, dither_floyd, dither_burkes],
+                         ["Grayscale Original", "Binarizat Simplu (2 culori)",
+                          "Floyd-Steinberg Dithering", "Burkes Dithering"],
+                         "Sarcina 7: Dithering (Conversie la imagine binară)")
+
+        # --- Rulează sarcina 8 ---
+        gray_3ch, false_color = sarcina_8_grayscale_to_rgb(img_gray_standard)
+        afiseaza_imagini([img_gray_standard, gray_3ch, false_color],
+                         ["Original Grayscale", "Copiat pe 3 Canale", "False Color (COLORMAP_JET)"],
+                         "Problema Inversă: Grayscale to RGB", cmap='gray')
     else:
-        print("Scriptul nu a putut rula sarcinile 2 și 3 deoarece imaginea de test nu a fost încărcată.")
+        print("Scriptul nu a putut rula deoarece imaginea de test nu a fost încărcată.")
 
