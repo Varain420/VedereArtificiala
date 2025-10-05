@@ -1,6 +1,5 @@
 # Laborator 1 - Îmbunătățirea imaginilor
-# Pentru a rula acest script, trebuie să aveți instalate următoarele biblioteci:
-# pip install opencv-python numpy matplotlib
+
 
 import cv2
 import numpy as np
@@ -208,7 +207,7 @@ def sarcina_7():
 
 # --- Execuția principală ---
 if __name__ == '__main__':
-    # URL pentru imaginea 'lena'. Puteți înlocui cu o cale locală dacă o aveți.
+    # URL pentru imaginea 'lena'. 
     # Exemplu: imagine = cv2.imread('cale/catre/lena.tif')
     URL_IMAGINE = "https://placehold.co/512x512/FF69B4/FFFFFF.png?text=Lene"
     imaginea_mea = incarcare_imagine_test(URL_IMAGINE)
@@ -222,3 +221,4 @@ if __name__ == '__main__':
         sarcina_7()
     else:
         print("Scriptul nu a putut rula deoarece imaginea de test nu a fost încărcată.")
+
